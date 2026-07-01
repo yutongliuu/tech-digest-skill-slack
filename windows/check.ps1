@@ -37,10 +37,14 @@ if (Test-Path $EnvFile) {
 Write-Output ""
 
 # 3. Socket receiver process
-$socket = Get-Process python -ErrorAction SilentlyContinue |
-    Where-Object { $_.CommandLine -and $_.CommandLine -match "slack_socket_mode" }
+# Match strictly on python.exe running slack_socket_mode.py — a loose regex
+# like "slack_socket_mode" also matches diagnostic commands whose command line
+# happens to contain that string.
+$socket = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -eq "python.exe" -and $_.CommandLine -match "slack_socket_mode\.py" }
 if ($socket) {
-    Write-Output "[OK]   Socket Mode receiver running (pid: $($socket.Id))"
+    $pids = ($socket | ForEach-Object { $_.ProcessId }) -join ", "
+    Write-Output "[OK]   Socket Mode receiver running (pid: $pids)"
 } else {
     Write-Output "[INFO] Socket Mode receiver not running."
     Write-Output "       It auto-starts on the next push (run_daily.ps1). Button"

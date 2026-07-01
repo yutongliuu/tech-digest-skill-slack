@@ -11,14 +11,13 @@ import json
 import os
 import re
 import time
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
-from zoneinfo import ZoneInfo
 
 UA = {
     "User-Agent": (
@@ -310,7 +309,11 @@ def _extract_published_date_from_page(html_text: str) -> date | None:
 
 
 def _today_shanghai() -> date:
-    return datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    # 用固定 +8 偏移算"中国今天"，不依赖 ZoneInfo("Asia/Shanghai")。
+    # Windows 默认不带 IANA 时区数据库，ZoneInfo 会抛
+    # "No time zone found with key Asia/Shanghai"，导致 Anthropic 抓取整段失败。
+    # 中国不使用夏令时，固定 UTC+8 永远正确。
+    return datetime.now(timezone(timedelta(hours=8))).date()
 
 
 def fetch_anthropic(limit: int = 3, session: requests.Session | None = None) -> list[dict[str, Any]]:
