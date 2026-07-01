@@ -21,12 +21,50 @@ DEFAULT_LOG = os.path.join(_DATA_DIR, "logs", "slack_card_actions.jsonl")
 DEFAULT_OUT = os.path.join(_DATA_DIR, "logs", "recommendations.jsonl")
 
 TOPIC_KEYWORDS = {
-    "LLM": [r"\bllm\b", r"language model", r"transformer", r"chatbot", r"agent"],
-    "CV": [r"\bvision\b", r"image", r"diffusion", r"segmentation", r"detection"],
-    "Robotics": [r"robot", r"manipulation", r"motion", r"grasp"],
-    "Security": [r"security", r"privacy", r"attack", r"adversarial"],
-    "Data": [r"dataset", r"benchmark", r"evaluation", r"corpus"],
-    "Infra": [r"system", r"infrastructure", r"deployment", r"serving", r"runtime"],
+    # 大语言模型 / 生成式 / Agent
+    "LLM": [
+        r"\bllm\b", r"\bllms\b", r"language model", r"large language",
+        r"transformer", r"chatbot", r"\bagent", r"\bgpt\b", r"gpt-\d",
+        r"foundation model", r"\bnlp\b", r"instruction", r"fine-tun",
+        r"\bprompt", r"in-context", r"\brlhf\b", r"\brag\b", r"retrieval-augmented",
+        r"reasoning", r"chain-of-thought", r"\bcot\b", r"mixture-of-experts",
+        r"\bmoe\b", r"multimodal", r"\bmllm\b", r"embedding", r"tokeniz",
+    ],
+    # 计算机视觉 / 图像 / 视频 / 生成
+    "CV": [
+        r"\bvision\b", r"visual", r"image", r"\bvideo\b", r"diffusion",
+        r"segmentation", r"detection", r"\bocr\b", r"generation",
+        r"text-to-image", r"text-to-video", r"\bgan\b", r"\bvae\b",
+        r"rendering", r"3d", r"nerf", r"gaussian splatting", r"pose",
+        r"recognition", r"\bvlm\b", r"vision-language",
+    ],
+    # 机器人 / 具身智能 / 控制
+    "Robotics": [
+        r"robot", r"manipulation", r"motion", r"grasp", r"embodied",
+        r"locomotion", r"navigation", r"control policy", r"\brl\b",
+        r"reinforcement learning", r"imitation learning", r"autonomous",
+        r"self-driving", r"driving", r"\bslam\b", r"actuat",
+    ],
+    # 安全 / 隐私 / 攻击
+    "Security": [
+        r"security", r"privacy", r"attack", r"adversarial", r"jailbreak",
+        r"vulnerab", r"exploit", r"malware", r"encrypt", r"backdoor",
+        r"poison", r"watermark", r"red team", r"safety", r"alignment",
+    ],
+    # 数据 / 评测 / 基准
+    "Data": [
+        r"dataset", r"benchmark", r"evaluation", r"corpus", r"\beval\b",
+        r"annotation", r"data curation", r"synthetic data", r"\bqa\b",
+        r"leaderboard", r"metric",
+    ],
+    # 系统 / 基础设施 / 推理部署
+    "Infra": [
+        r"system", r"infrastructure", r"deployment", r"serving", r"runtime",
+        r"inference", r"training", r"distributed", r"parallel", r"\bgpu\b",
+        r"\bcuda\b", r"kernel", r"quantiz", r"compress", r"latency",
+        r"throughput", r"optimiz", r"scal", r"framework", r"pipeline",
+        r"\bmlops\b", r"kubernetes", r"cluster",
+    ],
 }
 
 
@@ -320,9 +358,9 @@ def main() -> None:
     parser.add_argument("--hf-top-k", type=int, default=3)
     parser.add_argument("--gh-top-k", type=int, default=3)
     parser.add_argument("--anthropic-top-k", type=int, default=-1)
-    parser.add_argument("--hf-candidate-k", type=int, default=6)
-    parser.add_argument("--gh-candidate-k", type=int, default=6)
-    parser.add_argument("--anthropic-candidate-k", type=int, default=6)
+    parser.add_argument("--hf-candidate-k", type=int, default=10)
+    parser.add_argument("--gh-candidate-k", type=int, default=10)
+    parser.add_argument("--anthropic-candidate-k", type=int, default=10)
     parser.add_argument("--proxy", default=os.environ.get("TECH_DIGEST_PROXY"))
     parser.add_argument("--llm-endpoint", default=os.environ.get("GENREC_ENDPOINT", ""))
     parser.add_argument("--llm-api-key", default=os.environ.get("GENREC_API_KEY"))

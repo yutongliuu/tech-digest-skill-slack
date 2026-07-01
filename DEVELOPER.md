@@ -69,7 +69,7 @@ tech-digest-skill/
     ├── install.ps1               # 一键装依赖 + 注册任务计划程序定时任务
     ├── run_daily.ps1             # 手动跑一次完整推送
     ├── run_socket.ps1            # 启动回调接收器（前台）
-    └── WINDOWS.md                # Windows 专用图文教程
+    └── check.ps1                 # 健康自查（任务/接收器/反馈状态）
 ```
 
 ### 三个核心 Python 模块的分工

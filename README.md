@@ -20,7 +20,7 @@
 
 点击「感兴趣」或「不感兴趣」，下一次推送会根据你的反馈调整内容。
 
-> 💡 **Windows + 公司网络（Netskope 等代理）用户**：本仓库自带 Windows 专用安装手册，包含证书处理、PowerShell 脚本和任务计划程序定时配置。请直接看 [`windows/WINDOWS.md`](./windows/WINDOWS.md)。
+> 💡 **Windows + 公司网络（Netskope 等代理）用户**：安装步骤见下方 [安装 → Windows](#windows)，包含证书处理、PowerShell 脚本和任务计划程序定时配置。
 
 ---
 
@@ -88,8 +88,11 @@ Socket Mode 下，按钮点击通过 `block_actions` 交互事件回传，无需
 ### 3. Python 3.9+
 
 ```bash
-python3 --version
+python3 --version    # macOS / Linux
+python --version     # Windows
 ```
+
+Windows 没装的话：`winget install Python.Python.3.12`（装完重开终端）。
 
 ---
 
@@ -115,7 +118,95 @@ GitHub 摘要会调用 `api.github.com/repos/...` 拿仓库描述与 README。**
 
 ## 安装
 
-### 第一步：克隆并初始化
+先完成上面「前提条件」拿到凭证，再按你的操作系统选一节。两节内容平行，看自己那节即可。
+
+- [Windows](#windows)（含公司网络 Netskope 证书处理）
+- [macOS / Linux](#macos--linux)
+
+---
+
+### Windows
+
+> 适合公司 Windows 电脑。用「任务计划程序」定时推送，错过会在开机后自动补跑。
+
+**第 1 步：拿到项目代码**
+
+把整个项目文件夹放到本地，建议 `C:\Users\<你>\tech-digest-skill-slack\`，然后进目录：
+
+```powershell
+cd C:\Users\<你>\tech-digest-skill-slack
+```
+
+**第 2 步：处理公司证书（Netskope 等代理）**
+
+公司网络若用 Netskope/Zscaler 等做 HTTPS 中间人解密，pip 和 Python 联网会因不认识证书而失败（报 `SELF_SIGNED_CERT_IN_CHAIN`）。先检查有没有这类证书：
+
+```powershell
+Get-ChildItem -Path Cert:\LocalMachine\Root |
+  Where-Object { $_.Subject -match "Netskope|Zscaler|Bluecoat|Forcepoint" } |
+  Select-Object Subject, Thumbprint
+```
+
+**没有任何输出** = 公司没用这类代理，跳到第 3 步。
+**有输出**：记下 Thumbprint，替换进下面导出证书到项目根目录：
+
+```powershell
+$thumbprint = "你记下的Thumbprint"
+$cert = Get-ChildItem -Path Cert:\LocalMachine\Root | Where-Object { $_.Thumbprint -eq $thumbprint }
+$base64 = [System.Convert]::ToBase64String($cert.RawData, 'InsertLineBreaks')
+"-----BEGIN CERTIFICATE-----`r`n$base64`r`n-----END CERTIFICATE-----" |
+  Set-Content -Path ".\netskope.crt" -Encoding ASCII
+Write-Output "导出完成: $(Resolve-Path .\netskope.crt)"
+```
+
+> 之后所有 PowerShell 脚本会自动读这个 `netskope.crt`，让 pip 和 `requests` 信任公司证书，无需每次手动设环境变量。该文件已被 `.gitignore` 排除，不会上传。
+
+**第 3 步：填配置 `.env`**
+
+```powershell
+copy .env.example .env
+notepad .env
+```
+
+填入必填项（细节见上方「前提条件」和「怎么查自己的 Slack 用户 ID」）：
+
+```
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_APP_TOKEN=xapp-1-...
+SLACK_DEFAULT_USERS=U07XXXXXXX     # 你自己的 Slack 用户 ID
+GENREC_API_KEY=sk-...              # DeepSeek 等 LLM Key
+PUSH_TIME=10:00                    # 每日推送时间，本机本地时间
+# 公司 DNS 访问 huggingface.co 不稳时建议开镜像：
+# HF_ENDPOINT=https://hf-mirror.com
+```
+
+**第 4 步：一键安装 + 注册定时任务**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\install.ps1
+```
+
+它会：检测 Python → 用公司证书装依赖 → 在任务计划程序注册 `TechDigest-Daily`（每天按 `PUSH_TIME` 跑，错过开机补跑）。
+
+**第 5 步：手动跑一次验证**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\run_daily.ps1
+```
+
+看到 `{"sent":1,"failed":0,...}` 且 Slack 收到卡片即成功。之后每天定时自动推送；每次推送会自动拉起「回调接收器」记录你的点击反馈，无需单独维护。
+
+**随时自查状态**：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File windows\check.ps1
+```
+
+---
+
+### macOS / Linux
+
+**第一步：克隆并初始化**
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/tech-digest-skill
@@ -123,19 +214,17 @@ cd tech-digest-skill
 bash install.sh
 ```
 
-首次运行会生成 `.env` 配置文件，然后自动退出并提示你填写凭证。
+首次运行生成 `.env` 并退出，提示你填写凭证。
 
-### 第二步：填写凭证
+**第二步：填写凭证**
 
-打开 `.env`，填入 Slack 和 LLM 的配置：
+打开 `.env`，填入 Slack 和 LLM 配置：
 
 ```bash
-# Slack 应用凭证（必填）
 SLACK_BOT_TOKEN=xoxb-xxxxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx
 SLACK_APP_TOKEN=xapp-1-xxxxxxxxxx-xxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxx
 
 # 种子用户（必填——否则第一条推送发不出去，见下方「首次使用」）
-# 填你自己的 Slack 用户 ID，多个用逗号分隔
 SLACK_DEFAULT_USERS=U07XXXXXXXX
 
 # LLM 配置（必填）
@@ -143,11 +232,27 @@ GENREC_ENDPOINT=https://api.deepseek.com/v1/chat/completions
 GENREC_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 GENREC_MODEL=deepseek-chat
 
-# 数据目录（可选，默认 ~/.tech-digest）
-# TECH_DIGEST_DATA_DIR=/path/to/your/data/dir
+# 每日推送时间（本机本地时间，可选，默认 10:00）
+PUSH_TIME=10:00
 ```
 
 > `.env` 已被 `.gitignore` 排除，不会上传到 GitHub。
+
+**第三步：完成安装**
+
+```bash
+bash install.sh
+```
+
+脚本会自动完成：装 Python 依赖、启动 Slack 回调接收器（后台常驻、崩溃自动重启）、按 `PUSH_TIME` 设置每日定时推送（launchd / crontab）。
+
+完成后手动触发一次确认收到卡片：
+
+```bash
+bash scripts/run_daily_recommendations.sh
+```
+
+---
 
 #### 怎么查自己的 Slack 用户 ID（填 `SLACK_DEFAULT_USERS` 用）
 
@@ -160,28 +265,11 @@ GENREC_MODEL=deepseek-chat
 
 > 给同事用时，让他们各自这样查到自己的 ID 发给你，逗号拼接：`SLACK_DEFAULT_USERS=U07ABC,U07DEF`。
 
-#### 为什么这一项必填？（冷启动）
+#### 为什么种子用户这一项必填？（冷启动）
 
 推送是"千人千面"的，系统靠**用户点击历史**决定推给谁、推什么。但**第一次运行时没有任何点击历史**——于是不知道发给谁，一条都发不出去（先有鸡还是先有蛋）。
 
 `SLACK_DEFAULT_USERS` 就是打破这个死锁的"第一批种子用户"：他们会先收到一份**非个性化**（接近随机）的推荐；一旦点了「感兴趣/不感兴趣」，系统就有了历史，之后转为个性化。点击约 10 次后效果明显提升。
-
-### 第三步：完成安装
-
-```bash
-bash install.sh
-```
-
-脚本会自动完成：
-- 安装 Python 依赖（`requests` / `beautifulsoup4` / `slack_bolt` / `slack_sdk`）
-- 启动 Slack 回调接收器（后台常驻，崩溃后自动重启）
-- 设置每天 09:00 自动推送
-
-完成后手动触发一次，确认收到卡片：
-
-```bash
-bash scripts/run_daily_recommendations.sh
-```
 
 ---
 
@@ -282,7 +370,7 @@ nanobot 会读取 `SKILL.md` 中的指令，执行推送流程。
 ## 工作原理
 
 ```
-每日 09:00 自动触发
+每日定时（PUSH_TIME）自动触发
         │
         ▼
 genrec_pipeline.py
@@ -318,7 +406,9 @@ slack_socket_mode.py（后台常驻，Socket Mode 长连接）
 1. 确认 `SLACK_DEFAULT_USERS` 填了有效的 Slack 用户 id（`U` 开头）——**首次使用必填**，否则没有任何收件人
 2. 确认 `SLACK_BOT_TOKEN`（`xoxb-`）填写正确，且 App 已安装到工作区
 3. 确认 Bot 有 `chat:write` 权限
-4. 查看错误日志：`cat ~/.tech-digest/logs/daily.err`
+4. 查看错误日志：
+   - Windows：`type "$env:USERPROFILE\.tech-digest\logs\daily.err"`
+   - macOS / Linux：`cat ~/.tech-digest/logs/daily.err`
 
 **Q：第一次跑，日志显示 `"users": 0` / `"sent": 0`**
 
@@ -327,18 +417,17 @@ slack_socket_mode.py（后台常驻，Socket Mode 长连接）
 **Q：点击「感兴趣」按钮没有反馈**
 
 回调接收器可能没有运行：
-```bash
-# macOS
-launchctl list | grep techdigest.socket
 
-# 查看连接日志（应能看到 Bolt 启动 / 已连接 Slack 的日志）
-tail ~/.tech-digest/logs/slack_socket.out
-```
+- **Windows**：`powershell -ExecutionPolicy Bypass -File windows\check.ps1`（看接收器在不在、上次跑没跑、反馈记了几条）
+- **macOS**：`launchctl list | grep techdigest.socket`
+- 查看连接日志（应能看到 Bolt 启动 / 已连接 Slack 的日志）：
+  Windows `type "$env:USERPROFILE\.tech-digest\logs\slack_socket.out"` / mac·Linux `tail ~/.tech-digest/logs/slack_socket.out`
+
 另外确认 App 的 **Socket Mode** 已开启、`SLACK_APP_TOKEN`（`xapp-`）填写正确。
 
 **Q：想换 LLM**
 
-修改 `.env` 中的三个参数，重新运行 `bash install.sh` 即可：
+修改 `.env` 中的三个参数，重新运行安装脚本即可（Windows `windows\install.ps1` / mac·Linux `bash install.sh`）：
 ```bash
 GENREC_ENDPOINT=https://api.openai.com/v1/chat/completions
 GENREC_API_KEY=sk-xxxx
@@ -356,7 +445,7 @@ GENREC_MODEL=gpt-4o-mini
 
 **Q：数据存在哪里**
 
-默认在 `~/.tech-digest/`：
+默认在 `~/.tech-digest/`（Windows 是 `C:\Users\<你>\.tech-digest\`）：
 ```
 ~/.tech-digest/
 ├── state.json                   # 上次抓取的内容，用于去重
@@ -364,6 +453,29 @@ GENREC_MODEL=gpt-4o-mini
     ├── slack_card_actions.jsonl # 用户点击记录（个性化数据）
     ├── slack_socket.out         # 回调接收器日志
     └── daily.out                # 每日推送日志
+```
+
+**Q：pip 报 `SELF_SIGNED_CERT_IN_CHAIN` / requests 调 Slack 报 SSL 错误**
+
+公司代理（Netskope/Zscaler 等）证书问题。见上方 [安装 → Windows](#windows) 第 2 步导出证书；确认 `netskope.crt` 在项目根目录。
+
+**Q：GitHub 卡片显示"暂无简介"**
+
+未认证 GitHub API 限速（60/小时，公司出口 IP 易被打满）。生成一个无权限 PAT 填到 `.env` 的 `GITHUB_TOKEN`，见「前提条件 4」。
+
+**Q：HuggingFace 那栏经常空 / 抓取失败**
+
+公司 DNS 解析 `huggingface.co` 不稳定。在 `.env` 加 `HF_ENDPOINT=https://hf-mirror.com` 走国内镜像。
+
+**Q：Slack 在国内访问慢 / 有时连不上**
+
+正常现象，脚本带 3 次重试，多数能恢复。彻底解决需给机器配出海代理。
+
+**Q：Windows 怎么改/关定时任务**
+
+开始菜单搜「任务计划程序」→ 找 `TechDigest-Daily` → 右键改触发器或禁用/删除。命令行停用：
+```powershell
+Unregister-ScheduledTask -TaskName "TechDigest-Daily" -Confirm:$false
 ```
 
 ---
