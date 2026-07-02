@@ -504,12 +504,26 @@ def build_report(
     proxy: str | None = None,
     hf_limit: int | None = 1,
     gh_limit: int | None = 1,
+    pushed_ids_path: str | None = None,
 ) -> dict[str, Any]:
     state = _load_state(state_path)
     prev_an = state.get("anthropic", {})
     prev_hf = state.get("hf", {})
     prev_gh = state.get("gh", {})
     session = _get_session(proxy) if proxy else DEFAULT_SESSION
+
+    # 已推送过的 item id（全局，跨源跨天累积）。去重以"推送过的"为准：
+    # 只有真正推给用户看过的才算 seen，仅仅被抓取到、但没推送的下次仍有机会。
+    # 若未提供 pushed_ids 文件，退回旧行为（用抓取快照 prev_ids 判重）。
+    use_pushed = pushed_ids_path is not None
+    pushed_ids: set[str] = set()
+    if use_pushed and os.path.exists(pushed_ids_path):
+        try:
+            with open(pushed_ids_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            pushed_ids = set(data.get("ids", []) if isinstance(data, dict) else data)
+        except Exception:
+            pushed_ids = set()
 
     out: dict[str, Any] = {
         "date": datetime.now().strftime("%Y-%m-%d"),
@@ -523,9 +537,10 @@ def build_report(
             today_items = [i for i in items if i.get("published_date") == today]
             ids = [i["id"] for i in today_items]
             prev_ids = prev_an.get("ids", []) if isinstance(prev_an, dict) else []
-            diff = _diff_ids(ids, prev_ids)
+            seen_ids = list(pushed_ids) if use_pushed else prev_ids
+            diff = _diff_ids(ids, seen_ids)
             has_update = len(ids) > 0
-            today_items = _tag_items(today_items, prev_ids)
+            today_items = _tag_items(today_items, seen_ids)
             out["anthropic"] = {
                 "items": today_items,
                 "diff": diff,
@@ -542,8 +557,9 @@ def build_report(
             items = fetch_hf_daily_papers(limit=hf_limit, session=session)
             ids = [i["id"] for i in items]
             prev_ids = prev_hf.get("ids", []) if isinstance(prev_hf, dict) else []
-            diff = _diff_ids(ids, prev_ids)
-            items = _tag_items(items, prev_ids)
+            seen_ids = list(pushed_ids) if use_pushed else prev_ids
+            diff = _diff_ids(ids, seen_ids)
+            items = _tag_items(items, seen_ids)
             out["hf"] = {"items": items, "diff": diff}
             state["hf"] = {"ids": ids, "items": items}
         except Exception as e:
@@ -554,8 +570,9 @@ def build_report(
             items = fetch_github_trending(limit=gh_limit, session=session)
             ids = [i["id"] for i in items]
             prev_ids = prev_gh.get("ids", []) if isinstance(prev_gh, dict) else []
-            diff = _diff_ids(ids, prev_ids)
-            items = _tag_items(items, prev_ids)
+            seen_ids = list(pushed_ids) if use_pushed else prev_ids
+            diff = _diff_ids(ids, seen_ids)
+            items = _tag_items(items, seen_ids)
             out["gh"] = {"items": items, "diff": diff}
             state["gh"] = {"ids": ids, "items": items}
         except Exception as e:

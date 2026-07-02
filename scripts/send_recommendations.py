@@ -24,6 +24,27 @@ import requests
 
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 
+_DATA_DIR = os.environ.get("TECH_DIGEST_DATA_DIR", os.path.expanduser("~/.tech-digest"))
+DEFAULT_PUSHED = os.path.join(_DATA_DIR, "logs", "pushed_ids.json")
+
+
+def _record_pushed_ids(path: str, new_ids: list[str]) -> None:
+    """把本次真正推送出去的 item id 追加进全局已推送档案（去重用）。"""
+    if not new_ids:
+        return
+    existing: list[str] = []
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            existing = data.get("ids", []) if isinstance(data, dict) else list(data)
+        except Exception:
+            existing = []
+    merged = list(dict.fromkeys(existing + new_ids))  # 去重且保序
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"ids": merged, "updated_at": datetime.now().isoformat()}, f, ensure_ascii=False, indent=2)
+
 
 def _now_str() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -281,6 +302,8 @@ def main() -> None:
     parser.add_argument("--llm-api-key", default=os.environ.get("GENREC_API_KEY"))
     parser.add_argument("--llm-model", default=os.environ.get("GENREC_MODEL"))
     parser.add_argument("--bot-token", default=os.environ.get("SLACK_BOT_TOKEN"))
+    parser.add_argument("--pushed-ids", default=DEFAULT_PUSHED,
+                        help="推送成功后把 item id 记入此档案，供下次抓取去重")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -302,6 +325,7 @@ def main() -> None:
     sent = 0
     skipped = 0
     failed = 0
+    pushed_item_ids: list[str] = []   # 本次真正推送成功的 item id
     summary_cache: dict[str, str] = {}
     for rec in records:
         user_id = rec.get("user_id")
@@ -337,9 +361,15 @@ def main() -> None:
         try:
             _send_blocks(blocks, user_id, args.title, bot_token)
             sent += 1
+            # 推送成功 → 记下这次真正发出去的 item id（供下次去重）
+            pushed_item_ids.extend(str(it.get("id")) for it in items if it.get("id"))
         except Exception as e:
             failed += 1
             print(json.dumps({"user_id": user_id, "error": str(e)}, ensure_ascii=False))
+
+    # 非 dry-run 时，把本次成功推送的 id 落盘（下次抓取据此判 same）
+    if not args.dry_run:
+        _record_pushed_ids(args.pushed_ids, pushed_item_ids)
 
     print(json.dumps({"sent": sent, "failed": failed, "skipped": skipped}, ensure_ascii=False))
 

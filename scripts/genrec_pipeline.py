@@ -19,6 +19,7 @@ from tech_digest import build_report
 _DATA_DIR = os.environ.get("TECH_DIGEST_DATA_DIR", os.path.expanduser("~/.tech-digest"))
 DEFAULT_LOG = os.path.join(_DATA_DIR, "logs", "slack_card_actions.jsonl")
 DEFAULT_OUT = os.path.join(_DATA_DIR, "logs", "recommendations.jsonl")
+DEFAULT_PUSHED = os.path.join(_DATA_DIR, "logs", "pushed_ids.json")
 
 TOPIC_KEYWORDS = {
     # 大语言模型 / 生成式 / Agent
@@ -354,6 +355,8 @@ def main() -> None:
     parser.add_argument("--report", default=None)
     parser.add_argument("--log", default=DEFAULT_LOG)
     parser.add_argument("--out", default=DEFAULT_OUT)
+    parser.add_argument("--pushed-ids", default=DEFAULT_PUSHED,
+                        help="已推送 item id 档案；抓取据此判重（只跳过真正推送过的）")
     parser.add_argument("--recent-days", type=int, default=15)
     parser.add_argument("--hf-top-k", type=int, default=3)
     parser.add_argument("--gh-top-k", type=int, default=3)
@@ -380,7 +383,8 @@ def main() -> None:
         with open(args.report, "r", encoding="utf-8") as f:
             report = json.load(f)
     else:
-        report = build_report(args.mode, args.state, proxy=args.proxy, hf_limit=None, gh_limit=None)
+        report = build_report(args.mode, args.state, proxy=args.proxy, hf_limit=None, gh_limit=None,
+                              pushed_ids_path=args.pushed_ids)
 
     history_by_user = _extract_history(args.log, args.recent_days)
 
