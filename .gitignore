@@ -24,3 +24,6 @@ logs/
 
 # macOS
 .DS_Store
+
+# 本地文稿，不上传
+docs/
